@@ -577,20 +577,19 @@ class AdminPsDataExporterController extends ModuleAdminController
      */
     private function processDownload()
     {
-        $token = Tools::getValue('file_token');
-        $fileId = (int) Tools::getValue('id_file');
+        $token = Tools::getValue('token_file');
+        $deleteAfter = (bool) Tools::getValue('delete_after', false);
 
-        if (empty($token) || $fileId <= 0) {
-            die($this->l('Paramètres invalides.'));
+        if (empty($token)) {
+            die($this->l('Token invalide.'));
         }
 
-        // Récupérer le fichier
+        // Récupérer le fichier par token
         $sql = new DbQuery();
         $sql->select('*');
         $sql->from('pde_export_file');
-        $sql->where('id_export_file = ' . $fileId);
         $sql->where('download_token = \'' . pSQL($token) . '\'');
-        $sql->where('expires_at > NOW()');
+        $sql->where('download_expires > NOW()');
 
         $file = Db::getInstance()->getRow($sql);
 
@@ -604,24 +603,72 @@ class AdminPsDataExporterController extends ModuleAdminController
         }
 
         // Incrémenter le compteur de téléchargements
+        $fileId = (int) $file['id_export_file'];
         Db::getInstance()->execute(
             'UPDATE `' . _DB_PREFIX_ . 'pde_export_file`
              SET download_count = download_count + 1
              WHERE id_export_file = ' . $fileId
         );
 
+        // Lire le contenu avant suppression éventuelle
+        $fileContent = file_get_contents($file['filepath']);
+        $filename = basename($file['filename']);
+        $filesize = strlen($fileContent);
+
+        // Supprimer après téléchargement si demandé
+        if ($deleteAfter || Configuration::get('PDE_DELETE_AFTER_DOWNLOAD')) {
+            @unlink($file['filepath']);
+            Db::getInstance()->delete('pde_export_file', 'id_export_file = ' . $fileId);
+
+            // Vérifier si c'était le dernier fichier du job
+            $jobId = (int) $file['id_export_job'];
+            $remainingFiles = Db::getInstance()->getValue(
+                'SELECT COUNT(*) FROM `' . _DB_PREFIX_ . 'pde_export_file`
+                 WHERE id_export_job = ' . $jobId
+            );
+
+            // Si plus de fichiers, nettoyer le répertoire du job et le job lui-même
+            if ($remainingFiles == 0) {
+                $this->cleanupJobDirectory($jobId);
+            }
+        }
+
         // Envoyer le fichier
         header('Content-Description: File Transfer');
         header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="' . basename($file['filename']) . '"');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
         header('Content-Transfer-Encoding: binary');
         header('Expires: 0');
         header('Cache-Control: must-revalidate');
         header('Pragma: public');
-        header('Content-Length: ' . $file['filesize']);
+        header('Content-Length: ' . $filesize);
 
-        readfile($file['filepath']);
+        echo $fileContent;
         exit;
+    }
+
+    /**
+     * Nettoie le répertoire d'un job
+     */
+    private function cleanupJobDirectory($jobId)
+    {
+        $exportDir = _PS_MODULE_DIR_ . 'ps_dataexporter/exports/' . $jobId . '/';
+
+        if (is_dir($exportDir)) {
+            $files = glob($exportDir . '*');
+            foreach ($files as $file) {
+                if (is_file($file)) {
+                    @unlink($file);
+                }
+            }
+            @rmdir($exportDir);
+        }
+
+        // Supprimer les logs du job
+        Db::getInstance()->delete('pde_export_log', 'id_export_job = ' . (int) $jobId);
+
+        // Supprimer le job
+        Db::getInstance()->delete('pde_export_job', 'id_export_job = ' . (int) $jobId);
     }
 
     /**

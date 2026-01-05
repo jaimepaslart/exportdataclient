@@ -21,10 +21,13 @@ class Ps_DataExporter extends Module
 
     /** @var array */
     private $configKeys = array(
-        'PDE_BATCH_SIZE' => 1000,
-        'PDE_CSV_SEPARATOR' => ';',
+        'PDE_BATCH_SIZE' => 500,
+        'PDE_CSV_DELIMITER' => ';',
         'PDE_CSV_ENCLOSURE' => '"',
-        'PDE_LINK_TTL_HOURS' => 24,
+        'PDE_CSV_UTF8_BOM' => 1,
+        'PDE_CREATE_ZIP' => 1,
+        'PDE_DOWNLOAD_TTL' => 24,
+        'PDE_DELETE_AFTER_DOWNLOAD' => 0,
         'PDE_CRON_TOKEN' => '',
         'PDE_CRON_IP_WHITELIST' => '',
         'PDE_INCLUDE_CUSTOM_COLUMNS' => 0,
@@ -118,19 +121,19 @@ class Ps_DataExporter extends Module
             `id_export_file` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
             `id_export_job` INT(11) UNSIGNED NOT NULL,
             `entity_name` VARCHAR(64) NOT NULL,
-            `filename` VARCHAR(255) NOT NULL,
             `filepath` VARCHAR(512) NOT NULL,
+            `filename` VARCHAR(255) NOT NULL,
             `filesize` BIGINT UNSIGNED DEFAULT 0,
             `row_count` INT(11) UNSIGNED DEFAULT 0,
-            `checksum_sha256` VARCHAR(64) DEFAULT NULL,
+            `checksum` VARCHAR(64) DEFAULT NULL,
             `download_token` VARCHAR(64) NOT NULL,
+            `download_expires` DATETIME NOT NULL,
             `download_count` INT(11) UNSIGNED DEFAULT 0,
-            `expires_at` DATETIME NOT NULL,
             `date_add` DATETIME NOT NULL,
             PRIMARY KEY (`id_export_file`),
             KEY `idx_job` (`id_export_job`),
             KEY `idx_token` (`download_token`),
-            KEY `idx_expires` (`expires_at`)
+            KEY `idx_expires` (`download_expires`)
         ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;';
 
         // Table de mapping géographique (département -> région FR)
