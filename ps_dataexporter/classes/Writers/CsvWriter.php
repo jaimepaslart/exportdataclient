@@ -53,8 +53,9 @@ class PdeCsvWriter
 
     /**
      * Ouvre le fichier en écriture
+     * @param bool $append Mode ajout (true) ou écrasement (false)
      */
-    public function open()
+    public function open($append = false)
     {
         // Créer le répertoire si nécessaire
         $dir = dirname($this->filepath);
@@ -64,14 +65,17 @@ class PdeCsvWriter
             }
         }
 
-        // Ouvrir en mode streaming
-        $this->handle = fopen($this->filepath, 'w');
+        // Ouvrir en mode streaming (write ou append)
+        $mode = $append ? 'a' : 'w';
+        $this->handle = fopen($this->filepath, $mode);
         if (!$this->handle) {
             throw new Exception('Impossible d\'ouvrir le fichier: ' . $this->filepath);
         }
 
-        // BOM UTF-8 pour Excel
-        fwrite($this->handle, "\xEF\xBB\xBF");
+        // BOM UTF-8 pour Excel (seulement si nouveau fichier)
+        if (!$append) {
+            fwrite($this->handle, "\xEF\xBB\xBF");
+        }
 
         return true;
     }
@@ -160,6 +164,14 @@ class PdeCsvWriter
     }
 
     /**
+     * Vérifie si le fichier est ouvert
+     */
+    public function isOpen()
+    {
+        return $this->handle !== null;
+    }
+
+    /**
      * Ferme le fichier
      */
     public function close()
@@ -184,6 +196,18 @@ class PdeCsvWriter
     public function getRowCount()
     {
         return $this->rowCount;
+    }
+
+    /**
+     * Récupère les statistiques du writer
+     */
+    public function getStats()
+    {
+        return array(
+            'row_count' => $this->rowCount,
+            'filesize' => $this->getFilesize(),
+            'filepath' => $this->filepath,
+        );
     }
 
     /**

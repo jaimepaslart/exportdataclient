@@ -5,8 +5,8 @@
  * Export complet des données Clients + Commandes avec filtres avancés
  * Compatible PHP 7.2 uniquement
  *
- * @author    Sakana
- * @copyright 2024 Sakana
+ * @author    Paul Bihr
+ * @copyright 2024 Paul Bihr
  * @license   MIT
  */
 
@@ -41,7 +41,7 @@ class Ps_DataExporter extends Module
         $this->name = 'ps_dataexporter';
         $this->tab = 'administration';
         $this->version = '1.0.0';
-        $this->author = 'Sakana';
+        $this->author = 'Paul Bihr';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = array(
             'min' => '1.7.6.5',

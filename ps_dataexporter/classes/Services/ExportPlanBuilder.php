@@ -375,7 +375,60 @@ class PdeExportPlanBuilder
     {
         return array(
             'relational' => 'Relationnel (1 fichier par entité)',
-            'flat' => 'Aplati (1 fichier unique)',
+            'enriched' => 'Enrichi (commandes avec infos clients)',
+            'flat' => 'Aplati (1 fichier unique complet)',
+        );
+    }
+
+    /**
+     * Retourne les colonnes enrichies pour les commandes
+     */
+    public static function getEnrichedOrderColumns()
+    {
+        return array(
+            // Colonnes commande de base
+            'id_order', 'reference', 'id_customer', 'current_state',
+            'payment', 'total_paid_tax_incl', 'total_paid_tax_excl',
+            'total_products', 'total_shipping_tax_incl',
+            'date_add', 'valid',
+            // Colonnes client jointes
+            'customer_email', 'customer_firstname', 'customer_lastname',
+            'customer_company', 'customer_siret',
+            // Colonnes adresse livraison
+            'delivery_company', 'delivery_firstname', 'delivery_lastname',
+            'delivery_address1', 'delivery_address2', 'delivery_postcode',
+            'delivery_city', 'delivery_country', 'delivery_phone',
+            // Colonnes adresse facturation
+            'invoice_company', 'invoice_firstname', 'invoice_lastname',
+            'invoice_address1', 'invoice_address2', 'invoice_postcode',
+            'invoice_city', 'invoice_country', 'invoice_phone',
+        );
+    }
+
+    /**
+     * Retourne les colonnes pour le mode aplati (flat)
+     */
+    public static function getFlatExportColumns()
+    {
+        return array(
+            // Commande
+            'id_order', 'order_reference', 'order_date', 'order_status',
+            'payment_method', 'total_paid_tax_incl', 'total_paid_tax_excl',
+            'total_products', 'total_shipping',
+            // Client
+            'customer_id', 'customer_email', 'customer_firstname', 'customer_lastname',
+            'customer_company', 'customer_newsletter',
+            // Adresse livraison
+            'delivery_firstname', 'delivery_lastname', 'delivery_company',
+            'delivery_address1', 'delivery_address2', 'delivery_postcode',
+            'delivery_city', 'delivery_country', 'delivery_phone',
+            // Adresse facturation
+            'invoice_firstname', 'invoice_lastname', 'invoice_company',
+            'invoice_address1', 'invoice_address2', 'invoice_postcode',
+            'invoice_city', 'invoice_country', 'invoice_phone',
+            // Détail produit
+            'product_id', 'product_name', 'product_reference',
+            'product_quantity', 'product_price_tax_incl', 'product_price_tax_excl',
         );
     }
 }

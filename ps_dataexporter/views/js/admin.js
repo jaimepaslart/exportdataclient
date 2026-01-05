@@ -2,8 +2,17 @@
  * PS Data Exporter - Admin JavaScript
  */
 
-(function($) {
+(function() {
     'use strict';
+
+    // Wait for jQuery to be available
+    function initPDE() {
+        if (typeof jQuery === 'undefined') {
+            setTimeout(initPDE, 100);
+            return;
+        }
+
+        var $ = jQuery;
 
     var PDE = {
         ajaxUrl: '',
@@ -11,12 +20,15 @@
         refreshDelay: 3000,
 
         init: function() {
+            console.log('PDE: Initializing...');
             this.ajaxUrl = typeof pde_ajax_url !== 'undefined' ? pde_ajax_url : '';
+            console.log('PDE: Ajax URL set to:', this.ajaxUrl);
 
             this.initExportForm();
             this.initProgressView();
             this.initHistoryView();
             this.initFilterVisibility();
+            console.log('PDE: Initialization complete');
         },
 
         /**
@@ -37,8 +49,9 @@
 
             // Form submit validation
             $('#pde-export-form').on('submit', function() {
-                var btn = $(this).find('[name="submitNewExport"]');
+                var btn = $('#pde-submit-btn');
                 btn.prop('disabled', true).html('<i class="icon-spinner icon-spin"></i> Démarrage...');
+                console.log('PDE: Form submitted');
             });
 
             // Initialize chosen selects
@@ -145,9 +158,13 @@
             });
 
             // Start auto-refresh if there are running jobs
+            console.log('PDE: Checking for running jobs...', typeof pde_running_jobs !== 'undefined' ? pde_running_jobs : 'undefined');
             if (typeof pde_running_jobs !== 'undefined' && pde_running_jobs.length > 0) {
+                console.log('PDE: Found ' + pde_running_jobs.length + ' job(s), starting batch execution');
                 this.startProgressRefresh();
                 this.runNextBatch();
+            } else {
+                console.log('PDE: No running jobs found');
             }
         },
 
@@ -234,14 +251,15 @@
         },
 
         /**
-         * Run next batch for running jobs
+         * Run next batch for pending/running jobs
          */
         runNextBatch: function() {
             var self = this;
             var runningJobs = typeof pde_running_jobs !== 'undefined' ? pde_running_jobs : [];
 
             runningJobs.forEach(function(job) {
-                if (job.status === 'running') {
+                // Start pending jobs and continue running jobs
+                if (job.status === 'running' || job.status === 'pending') {
                     self.executeBatch(job.id_export_job);
                 }
             });
@@ -252,6 +270,8 @@
          */
         executeBatch: function(jobId) {
             var self = this;
+            console.log('PDE: Executing batch for job #' + jobId);
+            console.log('PDE: AJAX URL:', this.ajaxUrl);
 
             $.ajax({
                 url: this.ajaxUrl,
@@ -263,19 +283,23 @@
                 },
                 dataType: 'json',
                 success: function(response) {
+                    console.log('PDE: Batch response:', response);
                     if (response.success) {
                         if (response.status === 'running') {
                             // Continue with next batch
                             setTimeout(function() {
                                 self.executeBatch(jobId);
                             }, 500);
+                        } else {
+                            console.log('PDE: Job status is now:', response.status);
                         }
                     } else {
-                        console.error('Batch error:', response.error);
+                        console.error('PDE: Batch error:', response.error);
                     }
                 },
                 error: function(xhr, status, error) {
-                    console.error('Batch AJAX error:', error);
+                    console.error('PDE: Batch AJAX error:', error);
+                    console.error('PDE: XHR response:', xhr.responseText);
                     // Retry after delay
                     setTimeout(function() {
                         self.executeBatch(jobId);
@@ -392,4 +416,13 @@
         PDE.init();
     });
 
-})(jQuery);
+    } // End of initPDE function
+
+    // Start initialization
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initPDE);
+    } else {
+        initPDE();
+    }
+
+})();

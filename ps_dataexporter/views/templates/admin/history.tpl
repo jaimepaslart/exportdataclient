@@ -1,4 +1,4 @@
-{**
+{*
  * Export history view
  *}
 <div class="panel pde-history">
@@ -6,7 +6,7 @@
         <i class="icon-history"></i> {l s='Historique des exports' mod='ps_dataexporter'}
     </div>
     <div class="panel-body">
-        {if empty($completed_jobs)}
+        {if empty($jobs)}
             <div class="alert alert-info">
                 <i class="icon-info-circle"></i> {l s='Aucun export termine.' mod='ps_dataexporter'}
             </div>
@@ -26,7 +26,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {foreach from=$completed_jobs item=job}
+                    {foreach from=$jobs item=job}
                         <tr class="pde-job-row {if $job.status == 'failed'}danger{elseif $job.status == 'completed'}success{/if}">
                             <td>{$job.id_export_job|intval}</td>
                             <td>
@@ -108,7 +108,7 @@
             </table>
 
             {* Pagination if needed *}
-            {if $total_pages > 1}
+            {if isset($total_pages) && $total_pages > 1}
                 <nav class="text-center">
                     <ul class="pagination">
                         {for $p=1 to $total_pages}

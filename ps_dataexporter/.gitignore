@@ -1,0 +1,16 @@
+# Exports directory
+exports/
+
+# Debug files
+debug.log
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

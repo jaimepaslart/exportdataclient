@@ -22,7 +22,6 @@ class AdminPsDataExporterController extends ModuleAdminController
     public function __construct()
     {
         $this->bootstrap = true;
-        $this->display = 'view';
 
         parent::__construct();
 
@@ -35,10 +34,21 @@ class AdminPsDataExporterController extends ModuleAdminController
     public function init()
     {
         parent::init();
+    }
 
-        // Ajouter CSS/JS
-        $this->addCSS(_PS_MODULE_DIR_ . 'ps_dataexporter/views/css/admin/admin.css');
-        $this->addJS(_PS_MODULE_DIR_ . 'ps_dataexporter/views/js/admin/admin.js');
+    /**
+     * Chargement des CSS/JS
+     */
+    public function setMedia($isNewTheme = false)
+    {
+        parent::setMedia($isNewTheme);
+
+        // Construire l'URL du module directement
+        $baseUri = defined('__PS_BASE_URI__') ? __PS_BASE_URI__ : '/';
+        $moduleBaseUri = $baseUri . 'modules/ps_dataexporter/views/';
+
+        $this->addCSS($moduleBaseUri . 'css/admin.css', 'all', null, false);
+        $this->addJS($moduleBaseUri . 'js/admin.js', false);
     }
 
     /**
@@ -64,7 +74,7 @@ class AdminPsDataExporterController extends ModuleAdminController
         }
 
         // Créer un nouvel export
-        if (Tools::isSubmit('submitNewExport')) {
+        if (Tools::isSubmit('submitNewExport') || Tools::getValue('pde_action') === 'new_export') {
             $this->processNewExport();
         }
 
@@ -92,7 +102,24 @@ class AdminPsDataExporterController extends ModuleAdminController
     /**
      * Affichage principal
      */
-    public function renderView()
+    public function initContent()
+    {
+        // Appeler le parent pour charger le layout admin (sidebar, header, etc.)
+        parent::initContent();
+
+        // Définir le contenu principal
+        $this->content = $this->getMainContent();
+
+        // Assigner au contexte Smarty pour le rendu
+        $this->context->smarty->assign(array(
+            'content' => $this->content,
+        ));
+    }
+
+    /**
+     * Contenu principal de la page
+     */
+    private function getMainContent()
     {
         $tab = Tools::getValue('tab', 'new');
 
@@ -105,24 +132,36 @@ class AdminPsDataExporterController extends ModuleAdminController
 
         $content = '';
 
-        switch ($tab) {
-            case 'new':
-                $content = $this->renderNewExportForm();
-                break;
-            case 'progress':
-                $content = $this->renderProgressView();
-                break;
-            case 'history':
-                $content = $this->renderHistoryView();
-                break;
-            case 'settings':
-                $content = $this->renderSettingsForm();
-                break;
-            default:
-                $content = $this->renderNewExportForm();
+        try {
+            switch ($tab) {
+                case 'new':
+                    $content = $this->renderNewExportForm();
+                    break;
+                case 'progress':
+                    $content = $this->renderProgressView();
+                    break;
+                case 'history':
+                    $content = $this->renderHistoryView();
+                    break;
+                case 'settings':
+                    $content = $this->renderSettingsForm();
+                    break;
+                default:
+                    $content = $this->renderNewExportForm();
+            }
+        } catch (Exception $e) {
+            $content = '<div class="alert alert-danger">Erreur: ' . htmlspecialchars($e->getMessage()) . '</div>';
         }
 
         return $this->renderTabs() . $content;
+    }
+
+    /**
+     * Rendu de la vue - PrestaShop appelle cette méthode
+     */
+    public function renderView()
+    {
+        return $this->getMainContent();
     }
 
     /**
@@ -174,6 +213,22 @@ class AdminPsDataExporterController extends ModuleAdminController
             'SELECT dept_code, dept_name FROM `' . _DB_PREFIX_ . 'pde_geo_map` ORDER BY dept_code'
         );
 
+        // Moyens de paiement (récupérés depuis les commandes existantes)
+        $paymentMethods = Db::getInstance()->executeS(
+            'SELECT DISTINCT payment FROM `' . _DB_PREFIX_ . 'orders` WHERE payment IS NOT NULL AND payment != \'\' ORDER BY payment'
+        );
+        $paymentMethodsList = array();
+        foreach ($paymentMethods as $pm) {
+            $paymentMethodsList[] = $pm['payment'];
+        }
+
+        // Catégories
+        $categories = Category::getCategories($this->context->language->id, true, false);
+
+        // Devise par défaut
+        $currency = Context::getContext()->currency;
+        $currencySign = $currency ? $currency->sign : '€';
+
         $this->context->smarty->assign(array(
             'export_types' => PdeExportPlanBuilder::getTypes(),
             'export_levels' => PdeExportPlanBuilder::getLevels(),
@@ -187,9 +242,13 @@ class AdminPsDataExporterController extends ModuleAdminController
             'order_states' => $orderStates,
             'customer_groups' => $groups,
             'countries' => $countries,
-            'regions' => $regions,
-            'departments' => $departments,
+            'regions' => $regions ? $regions : array(),
+            'departments' => $departments ? $departments : array(),
+            'payment_methods' => $paymentMethodsList,
+            'categories' => $categories ? $categories : array(),
+            'currency_sign' => $currencySign,
             'form_action' => $this->context->link->getAdminLink('AdminPsDataExporter') . '&tab=new',
+            'ajax_url' => $this->context->link->getAdminLink('AdminPsDataExporter'),
             'token' => $this->token,
             'is_multishop' => Shop::isFeatureActive(),
         ));
@@ -202,13 +261,21 @@ class AdminPsDataExporterController extends ModuleAdminController
      */
     private function renderProgressView()
     {
-        // Jobs en cours ou en pause
-        $runningJobs = PdeExportJob::getByStatus(PdeExportJob::STATUS_RUNNING, 10);
-        $pausedJobs = PdeExportJob::getByStatus(PdeExportJob::STATUS_PAUSED, 10);
+        // Jobs en attente, en cours ou en pause avec données employé
+        $sql = new DbQuery();
+        $sql->select('j.*, e.firstname, e.lastname');
+        $sql->from('pde_export_job', 'j');
+        $sql->leftJoin('employee', 'e', 'e.id_employee = j.id_employee');
+        $sql->where('j.status IN (\'' . pSQL(PdeExportJob::STATUS_PENDING) . '\', \'' . pSQL(PdeExportJob::STATUS_RUNNING) . '\', \'' . pSQL(PdeExportJob::STATUS_PAUSED) . '\')');
+        $sql->orderBy('j.date_add DESC');
+        $sql->limit(20);
 
-        $jobs = array_merge($runningJobs, $pausedJobs);
+        $jobs = Db::getInstance()->executeS($sql);
+        if (!$jobs) {
+            $jobs = array();
+        }
 
-        // Enrichir avec les données
+        // Enrichir avec les données de progression
         foreach ($jobs as &$job) {
             $jobObj = new PdeExportJob($job['id_export_job']);
             $job['progress'] = $jobObj->getProgressPercent();
@@ -396,7 +463,7 @@ class AdminPsDataExporterController extends ModuleAdminController
             $this->errors[] = $this->l('Niveau d\'export invalide.');
             return;
         }
-        if (!in_array($exportMode, array('relational', 'flat'))) {
+        if (!in_array($exportMode, array('relational', 'enriched', 'flat'))) {
             $this->errors[] = $this->l('Mode d\'export invalide.');
             return;
         }
@@ -577,7 +644,7 @@ class AdminPsDataExporterController extends ModuleAdminController
     /**
      * Téléchargement sécurisé
      */
-    private function processDownload()
+    public function processDownload()
     {
         $token = Tools::getValue('token_file');
         $deleteAfter = (bool) Tools::getValue('delete_after', false);
@@ -676,7 +743,7 @@ class AdminPsDataExporterController extends ModuleAdminController
     /**
      * Suppression d'un export
      */
-    private function processDeleteExport()
+    public function processDeleteExport()
     {
         if (!$this->isTokenValid()) {
             $this->errors[] = $this->l('Token de sécurité invalide.');

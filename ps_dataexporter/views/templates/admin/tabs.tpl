@@ -1,4 +1,4 @@
-{**
+{*
  * Tabs navigation for admin
  *}
 <div class="pde-tabs-container">

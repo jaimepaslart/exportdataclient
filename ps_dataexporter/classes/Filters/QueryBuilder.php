@@ -678,4 +678,290 @@ class PdeQueryBuilder
     {
         return $this->filters;
     }
+
+    /**
+     * Construit la requête enrichie pour les commandes (avec infos client et adresses)
+     */
+    public function buildEnrichedOrdersQuery($lastId = 0, $limit = 1000)
+    {
+        $f = $this->filters;
+
+        $sql = 'SELECT
+            o.id_order,
+            o.reference,
+            o.id_customer,
+            o.current_state,
+            o.payment,
+            o.total_paid_tax_incl,
+            o.total_paid_tax_excl,
+            o.total_products,
+            o.total_shipping_tax_incl,
+            o.date_add,
+            o.valid,
+            osl.name AS order_status_name,
+            c.email AS customer_email,
+            c.firstname AS customer_firstname,
+            c.lastname AS customer_lastname,
+            c.company AS customer_company,
+            c.siret AS customer_siret,
+            ad.company AS delivery_company,
+            ad.firstname AS delivery_firstname,
+            ad.lastname AS delivery_lastname,
+            ad.address1 AS delivery_address1,
+            ad.address2 AS delivery_address2,
+            ad.postcode AS delivery_postcode,
+            ad.city AS delivery_city,
+            cld.name AS delivery_country,
+            ad.phone AS delivery_phone,
+            ad.phone_mobile AS delivery_phone_mobile,
+            ai.company AS invoice_company,
+            ai.firstname AS invoice_firstname,
+            ai.lastname AS invoice_lastname,
+            ai.address1 AS invoice_address1,
+            ai.address2 AS invoice_address2,
+            ai.postcode AS invoice_postcode,
+            ai.city AS invoice_city,
+            cli.name AS invoice_country,
+            ai.phone AS invoice_phone
+        FROM `' . $this->prefix . 'orders` o
+        LEFT JOIN `' . $this->prefix . 'customer` c ON c.id_customer = o.id_customer
+        LEFT JOIN `' . $this->prefix . 'address` ad ON ad.id_address = o.id_address_delivery
+        LEFT JOIN `' . $this->prefix . 'address` ai ON ai.id_address = o.id_address_invoice
+        LEFT JOIN `' . $this->prefix . 'country_lang` cld ON cld.id_country = ad.id_country AND cld.id_lang = ' . (int) $this->idLang . '
+        LEFT JOIN `' . $this->prefix . 'country_lang` cli ON cli.id_country = ai.id_country AND cli.id_lang = ' . (int) $this->idLang . '
+        LEFT JOIN `' . $this->prefix . 'order_state_lang` osl ON osl.id_order_state = o.current_state AND osl.id_lang = ' . (int) $this->idLang;
+
+        $where = array();
+
+        if ($lastId > 0) {
+            $where[] = 'o.id_order > ' . (int) $lastId;
+        }
+
+        if ($this->idShop) {
+            $where[] = 'o.id_shop = ' . (int) $this->idShop;
+        }
+
+        // Appliquer les filtres de base
+        if (!empty($f['date_add_from'])) {
+            $where[] = 'o.date_add >= \'' . pSQL($f['date_add_from']) . ' 00:00:00\'';
+        }
+        if (!empty($f['date_add_to'])) {
+            $where[] = 'o.date_add <= \'' . pSQL($f['date_add_to']) . ' 23:59:59\'';
+        }
+        if (!empty($f['current_state'])) {
+            $where[] = 'o.current_state IN (' . implode(',', array_map('intval', $f['current_state'])) . ')';
+        }
+
+        // Filtres géographiques
+        if (!empty($f['id_country'])) {
+            $where[] = 'ad.id_country IN (' . implode(',', array_map('intval', $f['id_country'])) . ')';
+        }
+        // Filtre par département (préfixe code postal)
+        if (!empty($f['dept_code'])) {
+            $deptConditions = array();
+            foreach ($f['dept_code'] as $dept) {
+                $dept = pSQL($dept);
+                // Gérer les DOM-TOM (97x, 98x) avec 3 caractères
+                if (strlen($dept) === 3) {
+                    $deptConditions[] = 'ad.postcode LIKE \'' . $dept . '%\'';
+                } else {
+                    $deptConditions[] = 'LEFT(ad.postcode, 2) = \'' . $dept . '\'';
+                }
+            }
+            $where[] = '(' . implode(' OR ', $deptConditions) . ')';
+        }
+
+        // Filtres paiement/transport
+        if (!empty($f['payment'])) {
+            $where[] = 'o.payment = \'' . pSQL($f['payment']) . '\'';
+        }
+        if (!empty($f['id_carrier'])) {
+            $where[] = 'o.id_carrier IN (' . implode(',', array_map('intval', $f['id_carrier'])) . ')';
+        }
+
+        // Filtres montants
+        if (!empty($f['total_paid_tax_incl_min'])) {
+            $where[] = 'o.total_paid_tax_incl >= ' . (float) $f['total_paid_tax_incl_min'];
+        }
+        if (!empty($f['total_paid_tax_incl_max'])) {
+            $where[] = 'o.total_paid_tax_incl <= ' . (float) $f['total_paid_tax_incl_max'];
+        }
+
+        if (!empty($where)) {
+            $sql .= ' WHERE ' . implode(' AND ', $where);
+        }
+
+        $sql .= ' ORDER BY o.id_order ASC LIMIT ' . (int) $limit;
+
+        return $sql;
+    }
+
+    /**
+     * Construit la requête aplatie (commandes + détails + clients + adresses)
+     */
+    public function buildFlatExportQuery($lastId = 0, $limit = 1000)
+    {
+        $f = $this->filters;
+
+        $sql = 'SELECT
+            o.id_order,
+            o.reference AS order_reference,
+            o.date_add AS order_date,
+            osl.name AS order_status,
+            o.payment AS payment_method,
+            o.total_paid_tax_incl,
+            o.total_paid_tax_excl,
+            o.total_products,
+            o.total_shipping_tax_incl AS total_shipping,
+            c.id_customer AS customer_id,
+            c.email AS customer_email,
+            c.firstname AS customer_firstname,
+            c.lastname AS customer_lastname,
+            c.company AS customer_company,
+            c.newsletter AS customer_newsletter,
+            ad.firstname AS delivery_firstname,
+            ad.lastname AS delivery_lastname,
+            ad.company AS delivery_company,
+            ad.address1 AS delivery_address1,
+            ad.address2 AS delivery_address2,
+            ad.postcode AS delivery_postcode,
+            ad.city AS delivery_city,
+            cld.name AS delivery_country,
+            ad.phone AS delivery_phone,
+            ai.firstname AS invoice_firstname,
+            ai.lastname AS invoice_lastname,
+            ai.company AS invoice_company,
+            ai.address1 AS invoice_address1,
+            ai.address2 AS invoice_address2,
+            ai.postcode AS invoice_postcode,
+            ai.city AS invoice_city,
+            cli.name AS invoice_country,
+            ai.phone AS invoice_phone,
+            od.product_id,
+            od.product_name,
+            od.product_reference,
+            od.product_quantity,
+            od.total_price_tax_incl AS product_price_tax_incl,
+            od.total_price_tax_excl AS product_price_tax_excl
+        FROM `' . $this->prefix . 'orders` o
+        LEFT JOIN `' . $this->prefix . 'order_detail` od ON od.id_order = o.id_order
+        LEFT JOIN `' . $this->prefix . 'customer` c ON c.id_customer = o.id_customer
+        LEFT JOIN `' . $this->prefix . 'address` ad ON ad.id_address = o.id_address_delivery
+        LEFT JOIN `' . $this->prefix . 'address` ai ON ai.id_address = o.id_address_invoice
+        LEFT JOIN `' . $this->prefix . 'country_lang` cld ON cld.id_country = ad.id_country AND cld.id_lang = ' . (int) $this->idLang . '
+        LEFT JOIN `' . $this->prefix . 'country_lang` cli ON cli.id_country = ai.id_country AND cli.id_lang = ' . (int) $this->idLang . '
+        LEFT JOIN `' . $this->prefix . 'order_state_lang` osl ON osl.id_order_state = o.current_state AND osl.id_lang = ' . (int) $this->idLang;
+
+        $where = array();
+
+        if ($lastId > 0) {
+            $where[] = 'o.id_order > ' . (int) $lastId;
+        }
+
+        if ($this->idShop) {
+            $where[] = 'o.id_shop = ' . (int) $this->idShop;
+        }
+
+        // Appliquer les filtres de base
+        if (!empty($f['date_add_from'])) {
+            $where[] = 'o.date_add >= \'' . pSQL($f['date_add_from']) . ' 00:00:00\'';
+        }
+        if (!empty($f['date_add_to'])) {
+            $where[] = 'o.date_add <= \'' . pSQL($f['date_add_to']) . ' 23:59:59\'';
+        }
+        if (!empty($f['current_state'])) {
+            $where[] = 'o.current_state IN (' . implode(',', array_map('intval', $f['current_state'])) . ')';
+        }
+
+        // Filtres géographiques
+        if (!empty($f['id_country'])) {
+            $where[] = 'ad.id_country IN (' . implode(',', array_map('intval', $f['id_country'])) . ')';
+        }
+        // Filtre par département (préfixe code postal)
+        if (!empty($f['dept_code'])) {
+            $deptConditions = array();
+            foreach ($f['dept_code'] as $dept) {
+                $dept = pSQL($dept);
+                // Gérer les DOM-TOM (97x, 98x) avec 3 caractères
+                if (strlen($dept) === 3) {
+                    $deptConditions[] = 'ad.postcode LIKE \'' . $dept . '%\'';
+                } else {
+                    $deptConditions[] = 'LEFT(ad.postcode, 2) = \'' . $dept . '\'';
+                }
+            }
+            $where[] = '(' . implode(' OR ', $deptConditions) . ')';
+        }
+
+        // Filtres paiement/transport
+        if (!empty($f['payment'])) {
+            $where[] = 'o.payment = \'' . pSQL($f['payment']) . '\'';
+        }
+        if (!empty($f['id_carrier'])) {
+            $where[] = 'o.id_carrier IN (' . implode(',', array_map('intval', $f['id_carrier'])) . ')';
+        }
+
+        // Filtres montants
+        if (!empty($f['total_paid_tax_incl_min'])) {
+            $where[] = 'o.total_paid_tax_incl >= ' . (float) $f['total_paid_tax_incl_min'];
+        }
+        if (!empty($f['total_paid_tax_incl_max'])) {
+            $where[] = 'o.total_paid_tax_incl <= ' . (float) $f['total_paid_tax_incl_max'];
+        }
+
+        if (!empty($where)) {
+            $sql .= ' WHERE ' . implode(' AND ', $where);
+        }
+
+        $sql .= ' ORDER BY o.id_order ASC, od.id_order_detail ASC LIMIT ' . (int) $limit;
+
+        return $sql;
+    }
+
+    /**
+     * Compte les lignes pour le mode aplati
+     */
+    public function countFlatExport()
+    {
+        $sql = 'SELECT COUNT(*)
+        FROM `' . $this->prefix . 'orders` o
+        LEFT JOIN `' . $this->prefix . 'order_detail` od ON od.id_order = o.id_order';
+
+        $where = array();
+
+        if ($this->idShop) {
+            $where[] = 'o.id_shop = ' . (int) $this->idShop;
+        }
+
+        $f = $this->filters;
+        if (!empty($f['date_add_from'])) {
+            $where[] = 'o.date_add >= \'' . pSQL($f['date_add_from']) . ' 00:00:00\'';
+        }
+        if (!empty($f['date_add_to'])) {
+            $where[] = 'o.date_add <= \'' . pSQL($f['date_add_to']) . ' 23:59:59\'';
+        }
+
+        if (!empty($where)) {
+            $sql .= ' WHERE ' . implode(' AND ', $where);
+        }
+
+        return (int) Db::getInstance()->getValue($sql);
+    }
+
+    /**
+     * Compte les commandes pour estimation
+     */
+    public function countOrders()
+    {
+        $sql = $this->buildCountQuery('orders');
+        return (int) Db::getInstance()->getValue($sql);
+    }
+
+    /**
+     * Compte les clients pour estimation
+     */
+    public function countCustomers()
+    {
+        $sql = $this->buildCountQuery('customers');
+        return (int) Db::getInstance()->getValue($sql);
+    }
 }

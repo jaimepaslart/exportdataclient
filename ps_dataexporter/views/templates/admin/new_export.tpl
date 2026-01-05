@@ -1,4 +1,4 @@
-{**
+{*
  * New export form
  *}
 <div class="panel pde-new-export">
@@ -8,6 +8,7 @@
     <div class="panel-body">
         <form id="pde-export-form" class="form-horizontal" method="post" action="{$form_action|escape:'html':'UTF-8'}">
             <input type="hidden" name="submitNewExport" value="1" />
+            <input type="hidden" name="pde_action" value="new_export" />
             <input type="hidden" name="token" value="{$token|escape:'html':'UTF-8'}" />
 
             {* Type d'export *}
@@ -54,6 +55,11 @@
                             <option value="{$mode_key|escape:'html':'UTF-8'}">{$mode_label|escape:'html':'UTF-8'}</option>
                         {/foreach}
                     </select>
+                    <p class="help-block">
+                        <strong>Relationnel :</strong> {l s='1 fichier par entite (orders.csv, customer.csv, order_detail.csv...)' mod='ps_dataexporter'}<br/>
+                        <strong>Enrichi :</strong> {l s='Commandes avec infos client/adresse dans un seul fichier' mod='ps_dataexporter'}<br/>
+                        <strong>Aplati :</strong> {l s='Fichier unique avec commandes + details produits + clients (1 ligne par produit commande)' mod='ps_dataexporter'}
+                    </p>
                 </div>
             </div>
 
@@ -67,7 +73,7 @@
                     {l s='Boutique' mod='ps_dataexporter'}
                 </label>
                 <div class="col-lg-9">
-                    <select name="filters[id_shop]" class="form-control fixed-width-xl">
+                    <select name="id_shop" class="form-control fixed-width-xl">
                         <option value="">{l s='Toutes les boutiques' mod='ps_dataexporter'}</option>
                         {foreach from=$shops item=shop}
                             <option value="{$shop.id_shop|intval}">{$shop.name|escape:'html':'UTF-8'}</option>
@@ -87,13 +93,13 @@
                         <div class="col-lg-5">
                             <div class="input-group">
                                 <span class="input-group-addon">{l s='Du' mod='ps_dataexporter'}</span>
-                                <input type="date" name="filters[date_from]" class="form-control" />
+                                <input type="date" name="date_add_from" class="form-control" />
                             </div>
                         </div>
                         <div class="col-lg-5">
                             <div class="input-group">
                                 <span class="input-group-addon">{l s='Au' mod='ps_dataexporter'}</span>
-                                <input type="date" name="filters[date_to]" class="form-control" />
+                                <input type="date" name="date_add_to" class="form-control" />
                             </div>
                         </div>
                     </div>
@@ -110,14 +116,14 @@
                         <div class="col-lg-5">
                             <div class="input-group">
                                 <span class="input-group-addon">{l s='Min' mod='ps_dataexporter'}</span>
-                                <input type="number" step="0.01" name="filters[order_total_min]" class="form-control" placeholder="0.00" />
+                                <input type="number" step="0.01" name="total_paid_tax_incl_min" class="form-control" placeholder="0.00" />
                                 <span class="input-group-addon">{$currency_sign|escape:'html':'UTF-8'}</span>
                             </div>
                         </div>
                         <div class="col-lg-5">
                             <div class="input-group">
                                 <span class="input-group-addon">{l s='Max' mod='ps_dataexporter'}</span>
-                                <input type="number" step="0.01" name="filters[order_total_max]" class="form-control" placeholder="99999.99" />
+                                <input type="number" step="0.01" name="total_paid_tax_incl_max" class="form-control" placeholder="99999.99" />
                                 <span class="input-group-addon">{$currency_sign|escape:'html':'UTF-8'}</span>
                             </div>
                         </div>
@@ -131,7 +137,7 @@
                     {l s='Statuts de commande' mod='ps_dataexporter'}
                 </label>
                 <div class="col-lg-9">
-                    <select name="filters[order_states][]" multiple class="form-control chosen" style="width: 100%;">
+                    <select name="current_state[]" multiple class="form-control chosen" style="width: 100%;">
                         {foreach from=$order_states item=state}
                             <option value="{$state.id_order_state|intval}">{$state.name|escape:'html':'UTF-8'}</option>
                         {/foreach}
@@ -146,7 +152,8 @@
                     {l s='Moyens de paiement' mod='ps_dataexporter'}
                 </label>
                 <div class="col-lg-9">
-                    <select name="filters[payment_methods][]" multiple class="form-control chosen" style="width: 100%;">
+                    <select name="payment" class="form-control chosen" style="width: 100%;">
+                        <option value="">{l s='Tous' mod='ps_dataexporter'}</option>
                         {foreach from=$payment_methods item=method}
                             <option value="{$method|escape:'html':'UTF-8'}">{$method|escape:'html':'UTF-8'}</option>
                         {/foreach}
@@ -160,7 +167,7 @@
                     {l s='Transporteurs' mod='ps_dataexporter'}
                 </label>
                 <div class="col-lg-9">
-                    <select name="filters[carriers][]" multiple class="form-control chosen" style="width: 100%;">
+                    <select name="id_carrier[]" multiple class="form-control chosen" style="width: 100%;">
                         {foreach from=$carriers item=carrier}
                             <option value="{$carrier.id_carrier|intval}">{$carrier.name|escape:'html':'UTF-8'}</option>
                         {/foreach}
@@ -174,7 +181,7 @@
                     {l s='Pays' mod='ps_dataexporter'}
                 </label>
                 <div class="col-lg-9">
-                    <select name="filters[countries][]" multiple class="form-control chosen" style="width: 100%;">
+                    <select name="id_country[]" multiple class="form-control chosen" style="width: 100%;">
                         {foreach from=$countries item=country}
                             <option value="{$country.id_country|intval}">{$country.name|escape:'html':'UTF-8'}</option>
                         {/foreach}
@@ -188,9 +195,9 @@
                     {l s='Departements (FR)' mod='ps_dataexporter'}
                 </label>
                 <div class="col-lg-9">
-                    <select name="filters[departments][]" multiple class="form-control chosen" style="width: 100%;">
+                    <select name="dept_code[]" multiple class="form-control chosen" style="width: 100%;">
                         {foreach from=$departments item=dept}
-                            <option value="{$dept.department_code|escape:'html':'UTF-8'}">{$dept.department_code|escape:'html':'UTF-8'} - {$dept.department_name|escape:'html':'UTF-8'}</option>
+                            <option value="{$dept.dept_code|escape:'html':'UTF-8'}">{$dept.dept_code|escape:'html':'UTF-8'} - {$dept.dept_name|escape:'html':'UTF-8'}</option>
                         {/foreach}
                     </select>
                 </div>
@@ -202,9 +209,9 @@
                     {l s='Regions (FR)' mod='ps_dataexporter'}
                 </label>
                 <div class="col-lg-9">
-                    <select name="filters[regions][]" multiple class="form-control chosen" style="width: 100%;">
+                    <select name="region_code[]" multiple class="form-control chosen" style="width: 100%;">
                         {foreach from=$regions item=region}
-                            <option value="{$region|escape:'html':'UTF-8'}">{$region|escape:'html':'UTF-8'}</option>
+                            <option value="{$region.region_code|escape:'html':'UTF-8'}">{$region.region_name|escape:'html':'UTF-8'}</option>
                         {/foreach}
                     </select>
                 </div>
@@ -216,7 +223,7 @@
                     {l s='Groupes clients' mod='ps_dataexporter'}
                 </label>
                 <div class="col-lg-9">
-                    <select name="filters[customer_groups][]" multiple class="form-control chosen" style="width: 100%;">
+                    <select name="in_group[]" multiple class="form-control chosen" style="width: 100%;">
                         {foreach from=$customer_groups item=group}
                             <option value="{$group.id_group|intval}">{$group.name|escape:'html':'UTF-8'}</option>
                         {/foreach}
@@ -229,7 +236,7 @@
                     {l s='Newsletter' mod='ps_dataexporter'}
                 </label>
                 <div class="col-lg-9">
-                    <select name="filters[newsletter]" class="form-control fixed-width-lg">
+                    <select name="newsletter" class="form-control fixed-width-lg">
                         <option value="">{l s='Tous' mod='ps_dataexporter'}</option>
                         <option value="1">{l s='Inscrits uniquement' mod='ps_dataexporter'}</option>
                         <option value="0">{l s='Non-inscrits uniquement' mod='ps_dataexporter'}</option>
@@ -243,15 +250,11 @@
                     {l s='Coupons' mod='ps_dataexporter'}
                 </label>
                 <div class="col-lg-9">
-                    <label class="checkbox-inline">
-                        <input type="checkbox" name="filters[with_coupon]" value="1" />
-                        {l s='Avec coupon uniquement' mod='ps_dataexporter'}
-                    </label>
-                    <br/>
-                    <label class="checkbox-inline">
-                        <input type="checkbox" name="filters[without_coupon]" value="1" />
-                        {l s='Sans coupon uniquement' mod='ps_dataexporter'}
-                    </label>
+                    <select name="has_coupon" class="form-control fixed-width-lg">
+                        <option value="">{l s='Tous' mod='ps_dataexporter'}</option>
+                        <option value="1">{l s='Avec coupon uniquement' mod='ps_dataexporter'}</option>
+                        <option value="0">{l s='Sans coupon uniquement' mod='ps_dataexporter'}</option>
+                    </select>
                 </div>
             </div>
 
@@ -261,7 +264,7 @@
                     {l s='Contenant produit(s)' mod='ps_dataexporter'}
                 </label>
                 <div class="col-lg-9">
-                    <input type="text" name="filters[product_ids]" class="form-control" placeholder="{l s='IDs produits separes par virgule (ex: 12,45,78)' mod='ps_dataexporter'}" />
+                    <input type="text" name="has_product" class="form-control" placeholder="{l s='IDs produits separes par virgule (ex: 12,45,78)' mod='ps_dataexporter'}" />
                 </div>
             </div>
 
@@ -270,7 +273,7 @@
                     {l s='Categories' mod='ps_dataexporter'}
                 </label>
                 <div class="col-lg-9">
-                    <select name="filters[category_ids][]" multiple class="form-control chosen" style="width: 100%;">
+                    <select name="id_category[]" multiple class="form-control chosen" style="width: 100%;">
                         {foreach from=$categories item=cat}
                             <option value="{$cat.id_category|intval}">{$cat.name|escape:'html':'UTF-8'}</option>
                         {/foreach}
@@ -322,11 +325,27 @@
             </div>
 
             <div class="panel-footer">
-                <button type="submit" class="btn btn-primary" name="submitNewExport">
+                <button type="submit" class="btn btn-primary" id="pde-submit-btn" onclick="console.log('PDE: Button clicked'); return true;">
                     <i class="icon-download"></i> {l s='Demarrer l\'export' mod='ps_dataexporter'}
                 </button>
             </div>
         </form>
+
+        <script type="text/javascript">
+        // Debug: Monitor form submission
+        document.addEventListener('DOMContentLoaded', function() {
+            var form = document.getElementById('pde-export-form');
+            if (form) {
+                console.log('PDE: Form found, action =', form.action);
+                form.addEventListener('submit', function(e) {
+                    console.log('PDE: Form submit event fired');
+                    console.log('PDE: Form data:', new FormData(form));
+                });
+            } else {
+                console.log('PDE: Form NOT found!');
+            }
+        });
+        </script>
     </div>
 </div>
 

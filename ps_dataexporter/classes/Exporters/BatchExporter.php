@@ -7,7 +7,8 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-require_once dirname(__FILE__) . '/ExportPlanBuilder.php';
+require_once dirname(__FILE__) . '/../Services/ExportPlanBuilder.php';
+require_once dirname(__FILE__) . '/../Services/SchemaInspector.php';
 require_once dirname(__FILE__) . '/../Filters/QueryBuilder.php';
 require_once dirname(__FILE__) . '/../Writers/CsvWriter.php';
 
@@ -63,8 +64,12 @@ class PdeBatchExporter
             mkdir($this->exportDir, 0755, true);
         }
 
-        // Initialiser le QueryBuilder
-        $this->queryBuilder = new PdeQueryBuilder($this->idLang, $this->idShop);
+        // Initialiser le QueryBuilder avec les filtres et le contexte
+        $filtersWithContext = array_merge($this->filters, array(
+            'id_lang' => $this->idLang,
+            'id_shop' => $this->idShop,
+        ));
+        $this->queryBuilder = new PdeQueryBuilder($filtersWithContext);
 
         // Construire le plan d'export
         $planBuilder = new PdeExportPlanBuilder(
@@ -99,6 +104,15 @@ class PdeBatchExporter
                 ));
             }
 
+            // Vérifier le mode d'export
+            $exportMode = $this->job->export_mode;
+
+            // Mode enrichi ou aplati : utiliser des requêtes JOIN
+            if ($exportMode === 'enriched' || $exportMode === 'flat') {
+                return $this->runEnrichedOrFlatBatch($exportMode);
+            }
+
+            // Mode relationnel : continuer avec l'export par entités
             // Obtenir l'ordre d'export
             $planBuilder = new PdeExportPlanBuilder();
             $exportOrder = $planBuilder->getExportOrder($this->plan);
@@ -159,12 +173,29 @@ class PdeBatchExporter
                     } else {
                         $completed = true;
                     }
+                } else {
+                    // L'entité n'est pas terminée, sauvegarder la progression et retourner
+                    $this->job->updateProgress(
+                        $this->job->processed_records + $processed,
+                        $entity
+                    );
+                    return array(
+                        'status' => 'running',
+                        'processed' => $processed,
+                        'entity' => $entity,
+                        'message' => 'Batch terminé, entité en cours: ' . $entity,
+                    );
                 }
             }
 
             // Export terminé
             if ($completed) {
-                $this->finalizeExport();
+                try {
+                    $this->finalizeExport();
+                } catch (Exception $e) {
+                    // Même si finalizeExport échoue, marquer le job comme terminé
+                    $this->job->complete();
+                }
                 return array(
                     'status' => 'completed',
                     'processed' => $processed,
@@ -254,11 +285,11 @@ class PdeBatchExporter
     private function buildRootQuery($tableName, array $config, $cursor)
     {
         if ($tableName === 'orders') {
-            return $this->queryBuilder->buildOrdersQuery($this->filters, $this->batchSize, $cursor);
+            return $this->queryBuilder->buildOrdersQuery($cursor, $this->batchSize);
         }
 
         if ($tableName === 'customer') {
-            return $this->queryBuilder->buildCustomersQuery($this->filters, $this->batchSize, $cursor);
+            return $this->queryBuilder->buildCustomersQuery($cursor, $this->batchSize);
         }
 
         // Fallback générique
@@ -405,18 +436,24 @@ class PdeBatchExporter
             $filepath = $this->exportDir . $tableName . '.csv';
             $append = file_exists($filepath);
 
-            $this->writers[$tableName] = new PdeCsvWriter(
+            $writer = new PdeCsvWriter(
                 $filepath,
                 Configuration::get('PDE_CSV_DELIMITER', null, null, null, ';'),
                 Configuration::get('PDE_CSV_ENCLOSURE', null, null, null, '"'),
-                (bool) Configuration::get('PDE_CSV_UTF8_BOM', null, null, null, true)
+                false // anonymize
             );
+
+            // Ouvrir le fichier (mode append si fichier existe déjà)
+            $writer->open($append);
 
             // Écrire l'en-tête si nouveau fichier
             if (!$append) {
                 $columns = $this->getEntityColumns($tableName);
-                $this->writers[$tableName]->writeHeader($columns);
+                $writer->setColumns($columns);
+                $writer->writeHeader();
             }
+
+            $this->writers[$tableName] = $writer;
         }
 
         return $this->writers[$tableName];
@@ -428,11 +465,11 @@ class PdeBatchExporter
     private function getEntityColumns($tableName)
     {
         if (isset($this->plan['schema'][$tableName])) {
-            return array_keys($this->plan['schema'][$tableName]);
+            // Le schéma contient déjà les noms de colonnes directement
+            return $this->plan['schema'][$tableName];
         }
 
         // Fallback via SchemaInspector
-        require_once dirname(__FILE__) . '/SchemaInspector.php';
         $inspector = new PdeSchemaInspector();
         return $inspector->getColumnNames($tableName);
     }
@@ -481,14 +518,15 @@ class PdeBatchExporter
     private function finalizeExport()
     {
         // Fermer tous les writers
-        foreach ($this->writers as $writer) {
+        foreach ($this->writers as $tableName => $writer) {
             if ($writer->isOpen()) {
                 $writer->close();
             }
         }
 
         // Créer le ZIP si demandé
-        if (Configuration::get('PDE_CREATE_ZIP', null, null, null, true)) {
+        $createZip = Configuration::get('PDE_CREATE_ZIP', null, null, null, true);
+        if ($createZip) {
             $this->createZipArchive();
         }
 
@@ -551,6 +589,136 @@ class PdeBatchExporter
     }
 
     /**
+     * Exécute un batch en mode enrichi ou aplati
+     */
+    private function runEnrichedOrFlatBatch($mode)
+    {
+        $cursor = $this->job->getCursor('main');
+        $processed = 0;
+
+        // Nom du fichier selon le mode
+        $filename = ($mode === 'flat') ? 'export_complet' : 'orders_enriched';
+        $filepath = $this->exportDir . $filename . '.csv';
+
+        // Créer ou ouvrir le writer
+        $append = file_exists($filepath);
+        $writer = new PdeCsvWriter($filepath, ';', '"', false);
+        $writer->open($append);
+
+        // Colonnes selon le mode
+        if (!$append) {
+            if ($mode === 'flat') {
+                $columns = PdeExportPlanBuilder::getFlatExportColumns();
+            } else {
+                $columns = PdeExportPlanBuilder::getEnrichedOrderColumns();
+            }
+            $writer->setColumns($columns);
+            $writer->writeHeader();
+        }
+
+        // Construire la requête
+        if ($mode === 'flat') {
+            $query = $this->queryBuilder->buildFlatExportQuery($cursor, $this->batchSize);
+        } else {
+            $query = $this->queryBuilder->buildEnrichedOrdersQuery($cursor, $this->batchSize);
+        }
+
+        // Exécuter
+        $rows = Db::getInstance()->executeS($query);
+
+        if (empty($rows)) {
+            // Export terminé
+            $writer->close();
+            $this->registerEnrichedFile($filename, $writer);
+            $this->finalizeExport();
+
+            return array(
+                'status' => 'completed',
+                'processed' => $processed,
+                'message' => 'Export terminé avec succès',
+            );
+        }
+
+        // Écrire les lignes
+        $lastOrderId = $cursor;
+        foreach ($rows as $row) {
+            $writer->writeRow($row);
+            $processed++;
+
+            // Mettre à jour le curseur (basé sur id_order)
+            if (isset($row['id_order'])) {
+                $lastOrderId = (int) $row['id_order'];
+            }
+        }
+
+        // Sauvegarder le curseur
+        $this->job->setCursor('main', $lastOrderId);
+        $this->job->updateProgress($this->job->processed_records + $processed, $filename);
+
+        // Vérifier si terminé
+        $completed = count($rows) < $this->batchSize;
+
+        if ($completed) {
+            $writer->close();
+            $this->registerEnrichedFile($filename, $writer);
+            $this->finalizeExport();
+
+            return array(
+                'status' => 'completed',
+                'processed' => $processed,
+                'message' => 'Export terminé avec succès',
+            );
+        }
+
+        $writer->close();
+
+        return array(
+            'status' => 'running',
+            'processed' => $processed,
+            'entity' => $filename,
+            'message' => 'Batch terminé, en cours...',
+        );
+    }
+
+    /**
+     * Enregistre un fichier enrichi/aplati dans la base
+     */
+    private function registerEnrichedFile($filename, PdeCsvWriter $writer)
+    {
+        $filepath = $this->exportDir . $filename . '.csv';
+
+        if (!file_exists($filepath)) {
+            return;
+        }
+
+        $stats = $writer->getStats();
+
+        // Générer le token de téléchargement
+        $token = bin2hex(random_bytes(32));
+        $ttl = (int) Configuration::get('PDE_DOWNLOAD_TTL', null, null, null, 24);
+        $expiresAt = date('Y-m-d H:i:s', strtotime("+{$ttl} hours"));
+
+        Db::getInstance()->insert('pde_export_file', array(
+            'id_export_job' => (int) $this->job->id,
+            'entity_name' => pSQL($filename),
+            'filepath' => pSQL($filepath),
+            'filename' => pSQL($filename . '.csv'),
+            'filesize' => (int) filesize($filepath),
+            'row_count' => (int) $stats['row_count'],
+            'checksum' => pSQL($writer->getChecksum()),
+            'download_token' => pSQL($token),
+            'download_expires' => pSQL($expiresAt),
+            'download_count' => 0,
+            'date_add' => date('Y-m-d H:i:s'),
+        ));
+
+        $this->job->log('info', "Fichier généré: {$filename}.csv", array(
+            'rows' => $stats['row_count'],
+            'size' => filesize($filepath),
+        ));
+    }
+
+    /**
      * Estime le nombre total d'enregistrements
      */
     public static function estimateTotal($exportType, $exportLevel, array $filters)
@@ -558,7 +726,11 @@ class PdeBatchExporter
         $idLang = (int) Configuration::get('PS_LANG_DEFAULT');
         $idShop = isset($filters['id_shop']) ? (int) $filters['id_shop'] : null;
 
-        $queryBuilder = new PdeQueryBuilder($idLang, $idShop);
+        $filtersWithContext = array_merge($filters, array(
+            'id_lang' => $idLang,
+            'id_shop' => $idShop,
+        ));
+        $queryBuilder = new PdeQueryBuilder($filtersWithContext);
         $total = 0;
 
         if ($exportType === 'orders' || $exportType === 'full') {
