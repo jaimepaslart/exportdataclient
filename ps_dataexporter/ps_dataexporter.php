@@ -44,8 +44,8 @@ class Ps_DataExporter extends Module
         $this->author = 'Sakana';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = array(
-            'min' => '1.7.6.0',
-            'max' => '1.7.6.99',
+            'min' => '1.7.6.5',
+            'max' => '1.7.8.99',
         );
         $this->bootstrap = true;
 

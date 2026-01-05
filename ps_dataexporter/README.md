@@ -77,8 +77,8 @@ Le module inclut le mapping complet des 101 départements français vers leurs r
 
 ## Compatibilité
 
-- PrestaShop : 1.7.6.5 - 1.7.99.99
-- PHP : 7.2+
+- PrestaShop : 1.7.6.5 - 1.7.8.x
+- PHP : 7.2 - 7.4
 - MySQL : 5.7+ / MariaDB 10.2+
 
 ## Licence
