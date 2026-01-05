@@ -1,0 +1,222 @@
+/**
+ * PS Data Exporter - Admin CSS
+ */
+
+/* Tabs container */
+.pde-tabs-container {
+    margin-bottom: 20px;
+}
+
+.pde-tabs-container .nav-tabs {
+    border-bottom: 2px solid #363a41;
+}
+
+.pde-tabs-container .nav-tabs > li > a {
+    color: #363a41;
+    border-radius: 4px 4px 0 0;
+    padding: 10px 15px;
+}
+
+.pde-tabs-container .nav-tabs > li.active > a {
+    background-color: #363a41;
+    color: #fff;
+    border-color: #363a41;
+}
+
+.pde-tabs-container .nav-tabs > li > a:hover {
+    background-color: #f5f5f5;
+}
+
+.pde-tabs-container .badge {
+    margin-left: 5px;
+}
+
+/* New Export Form */
+.pde-new-export .form-group {
+    margin-bottom: 15px;
+}
+
+.pde-new-export hr {
+    margin: 25px 0;
+    border-color: #ddd;
+}
+
+.pde-new-export h4 {
+    color: #363a41;
+    margin-bottom: 20px;
+}
+
+.pde-new-export h4 i {
+    margin-right: 8px;
+}
+
+.pde-new-export .help-block {
+    font-size: 12px;
+    margin-top: 5px;
+}
+
+/* Progress View */
+.pde-progress .pde-job-card {
+    background: #f9f9f9;
+    border: 1px solid #e5e5e5;
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 15px;
+}
+
+.pde-progress .pde-job-card h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+.pde-progress .progress {
+    height: 25px;
+    border-radius: 4px;
+    background-color: #e9ecef;
+}
+
+.pde-progress .progress-bar {
+    line-height: 25px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.pde-progress .pde-progress-text {
+    padding: 0 10px;
+}
+
+/* History View */
+.pde-history .table {
+    margin-bottom: 20px;
+}
+
+.pde-history .table th {
+    background-color: #f5f5f5;
+    border-bottom: 2px solid #363a41;
+    font-weight: 600;
+}
+
+.pde-history .pde-job-row.danger {
+    background-color: #f2dede;
+}
+
+.pde-history .pde-job-row.success {
+    background-color: #dff0d8;
+}
+
+.pde-history .dropdown-menu {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.pde-history .dropdown-menu a {
+    padding: 8px 15px;
+}
+
+.pde-history .dropdown-menu a i {
+    margin-right: 8px;
+}
+
+/* Estimate result */
+#pde-estimate-result {
+    font-size: 14px;
+    padding: 8px 15px;
+    background: #d9edf7;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+#pde-estimate-result.loading {
+    background: #fcf8e3;
+}
+
+#pde-estimate-result.error {
+    background: #f2dede;
+    color: #a94442;
+}
+
+/* Filter groups visibility */
+.pde-filter-group[data-filter-type="orders"],
+.pde-filter-group[data-filter-type="customers"] {
+    transition: opacity 0.3s ease;
+}
+
+.pde-filter-group.hidden {
+    display: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 991px) {
+    .pde-progress .pde-job-card .btn {
+        margin-top: 10px;
+        display: block;
+        width: 100%;
+    }
+
+    .pde-history .table-responsive {
+        border: none;
+    }
+}
+
+/* Animations */
+.pde-fade-in {
+    animation: pde-fade-in 0.3s ease-in-out;
+}
+
+@keyframes pde-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Loading spinner */
+.pde-loading {
+    text-align: center;
+    padding: 40px;
+}
+
+.pde-loading i {
+    font-size: 32px;
+    color: #363a41;
+}
+
+/* Job status badges */
+.label-running {
+    background-color: #337ab7;
+}
+
+.label-paused {
+    background-color: #f0ad4e;
+}
+
+.label-completed {
+    background-color: #5cb85c;
+}
+
+.label-failed {
+    background-color: #d9534f;
+}
+
+/* Panel styling */
+.pde-new-export .panel-footer,
+.pde-history .panel-footer {
+    background-color: #f5f5f5;
+    border-top: 1px solid #ddd;
+    padding: 15px 20px;
+}
+
+/* Chosen plugin adjustments */
+.pde-new-export .chosen-container {
+    width: 100% !important;
+}
+
+.pde-new-export .chosen-container-multi .chosen-choices {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 4px 8px;
+}

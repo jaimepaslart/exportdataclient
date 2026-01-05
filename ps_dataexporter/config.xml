@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<module>
+    <name>ps_dataexporter</name>
+    <displayName><![CDATA[PS Data Exporter]]></displayName>
+    <version><![CDATA[1.0.0]]></version>
+    <description><![CDATA[Export complet des données clients et commandes avec filtres avancés]]></description>
+    <author><![CDATA[Claude Code]]></author>
+    <tab><![CDATA[export]]></tab>
+    <is_configurable>1</is_configurable>
+    <need_instance>0</need_instance>
+    <limited_countries></limited_countries>
+</module>

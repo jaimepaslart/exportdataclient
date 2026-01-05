@@ -1,0 +1,23 @@
+# Export files
+ps_dataexporter/exports/*
+!ps_dataexporter/exports/index.php
+!ps_dataexporter/exports/.htaccess
+
+# Logs
+ps_dataexporter/logs/*
+!ps_dataexporter/logs/index.php
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Composer
+vendor/
+composer.lock
