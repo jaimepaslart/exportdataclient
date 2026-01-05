@@ -190,6 +190,8 @@ class AdminPsDataExporterController extends ModuleAdminController
             'regions' => $regions,
             'departments' => $departments,
             'form_action' => $this->context->link->getAdminLink('AdminPsDataExporter') . '&tab=new',
+            'token' => $this->token,
+            'is_multishop' => Shop::isFeatureActive(),
         ));
 
         return $this->context->smarty->fetch(_PS_MODULE_DIR_ . 'ps_dataexporter/views/templates/admin/new_export.tpl');

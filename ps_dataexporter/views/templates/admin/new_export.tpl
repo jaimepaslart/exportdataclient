@@ -8,6 +8,7 @@
     <div class="panel-body">
         <form id="pde-export-form" class="form-horizontal" method="post" action="{$form_action|escape:'html':'UTF-8'}">
             <input type="hidden" name="submitNewExport" value="1" />
+            <input type="hidden" name="token" value="{$token|escape:'html':'UTF-8'}" />
 
             {* Type d'export *}
             <div class="form-group">
